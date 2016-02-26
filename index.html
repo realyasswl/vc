@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" href="static/style.css">
+    <style>
+        .photo {
+
+        }
+    </style>
+    <script src="static/d3.js" charset="utf-8"></script>
+    <script src="static/li.js" charset="utf-8"></script>
+    <script src="static/jquery-2.2.0.js"></script>
+    <script>
+        var margin = {top: 30, right: 30, bottom: 30, left: 30};
+        var v = {height: 1800, width: 800};
+        var base_dir = "photodir/";
+        var info_file = "info.csv";
+        var dataset;
+        //        canvas
+        var svga;
+        d3.csv(base_dir + info_file, function (error, data) {
+            if (error) throw error;
+            console.dir(data);
+            dataset = data.slice();
+            draw_gallery();
+        });
+        function draw_gallery() {
+            init();
+//            radius.selectAll("");
+            svga.selectAll(".photo").data(dataset, function (p) {
+                return p.FileName;
+            }).enter().append("image").attr("class", "photo")
+//                    .attr('x', -9)
+//                    .attr('y', -12)
+                    .attr("transform",function (p,i){
+                        var translate_x,translate_y;
+
+                    })
+                    .attr('width', 20)
+                    .attr('height', 24)
+                    .attr("xlink:href", function (p) {
+                        return base_dir + p.FileName;
+                    });
+
+        }
+        function init() {
+            svga = d3.select(".wrapper").append("svg")
+                    .attr("width", v.width + margin.left + margin.right)
+                    .attr("height", v.height + margin.top + margin.bottom)
+                    .append("g").attr("class", "g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+        }
+    </script>
+</head>
+<body>
+<div class="wrapper"></div>
+</body>
+</html>
