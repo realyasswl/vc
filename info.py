@@ -103,7 +103,7 @@ def clean_gps_info(exif_data):
 def print_info(dir):
     separator = ","
     tar_separator = "|"
-    exif_key_list = ["DateTime", "ExifImageHeight", "ExifImageWidth"]
+    exif_key_list = ["DateTime", "ExifImageHeight", "ExifImageWidth","Orientation"]
     gps_key_list = ["Latitude", "Longitude", "Altitude"]
     pic_list = [x for x in os.listdir(dir) if x != "info.csv"]
     f = open(dir+"info.csv", "w")
