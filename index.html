@@ -31,8 +31,8 @@
         var base_dir = "photodir/";
         var info_file = "info.csv";
         var dataset;
-        var rate = .05;
-        var interval = 200;
+        var rate = {max: 1, min: .1, default: .3, step: .01};
+        var interval = 500;
         //        canvas
         var svga;
         var x = d3.scale.linear().range([0, v.width]).domain([0, v.width]);
@@ -47,9 +47,11 @@
             /**test area*
              svga.append("image")
              .attr("class", "test1")
-             .attr("transform", "translate(100,100),rotate(0,204,153)")
-             .attr("width", 408)
-             .attr("height", 306)
+             .attr("transform", "translate(100,100),rotate(0,204,153),scale("+rate.default+")")
+             //             .attr("width", 408)
+             //             .attr("height", 306)
+             .attr("width", 3264)
+             .attr("height", 2448)
              .attr("xlink:href", "photodir/2015-02-18 124445.jpg");
              svga.append("line")
              .attr("class", "test2")
@@ -64,7 +66,7 @@
              function cycle() {
                 svga.select(".test1").transition().duration(interval)
                         .attrTween("transform", function () {
-                                    return d3.interpolateString("translate(100,100),rotate(0,204,153)", "translate(100,100),rotate(180,204,153)");
+                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(100,100),rotate(180,204,153),scale("+rate.default+")");
                                 }
                         ).each("end", cycle1);
             }
@@ -72,7 +74,7 @@
              function cycle1() {
                 svga.select(".test1").transition().duration(interval)
                         .attrTween("transform", function () {
-                                    return d3.interpolateString("translate(100,100),rotate(180,204,153)", "translate(200,200),rotate(180,204,153)");
+                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(200,200),rotate(180,204,153),scale("+rate.default+")");
                                 }
                         ).each("end", cycle2);
             }
@@ -80,20 +82,20 @@
              function cycle2() {
                 svga.select(".test1").transition().duration(interval)
                         .attrTween("transform", function () {
-                                    return d3.interpolateString("translate(200,200),rotate(180,204,153)", "translate(200,200),rotate(360,204,153)");
+                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(200,200),rotate(360,204,153),scale("+rate.default+")");
                                 }
                         ).each("end", cycle3);
             }
              function cycle3() {
                 svga.select(".test1").transition().duration(interval)
                         .attrTween("transform", function () {
-                                    return d3.interpolateString("translate(200,200),rotate(360,204,153)", "translate(100,100),rotate(0,204,153)");
+                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(100,100),rotate(0,204,153),scale("+rate.default+")");
                                 }
                         ).each("end", cycle);
             }
 
              /**test area*/
-        });
+        })
         function exceeds(d, o) {
             return d.i.top().y < o.y || d.i.right().x > o.x + o.w || d.i.bottom().y > o.y + o.h || d.i.left().x < o.x;
         }
@@ -105,9 +107,11 @@
             function judge() {
                 if (dataset.some(function (d0) {
                             return exceeds(d0, o)
-                                    || dataset.some(function (d1) {
-                                        return overlap(d0, d1);
-                                    });
+                                    || (dataset.some(function (d1) {
+                                                return overlap(d0, d1);
+                                            })
+//                                    && d0.i.rate < rate.max-rate.step
+                                    );
                         })) {
                     cycle();
                 }
@@ -145,38 +149,46 @@
                                 x += 0 - d.i.left().x;
                             }
 
-                            /* solve overlap*/
-                            dataset.forEach(function (d1) {
-                                if (overlap(d, d1)) {
-                                    x += (d.i.x() - d1.i.x()) / 2;
-                                    y += (d.i.y() - d1.i.y()) / 2;
+                            var adjacent = dataset.filter(function (d1) {
+                                return overlap(d, d1);
+                            }).slice();
+//                            console.log(adjacent.length);
+                            if (adjacent.length == 0) {
+                                if (d.i.rate < rate.max) {
+                                    d.i.update_rate(d.i.rate + rate.step);
                                 }
-                            });
-                            x = d.i.x() + (x - d.i.x()) / dataset.length;
-                            y = d.i.y() + (y - d.i.y()) / dataset.length;
+                            } else {
+                                if (d.i.rate > rate.min) {
+                                    d.i.update_rate(d.i.rate - rate.step);
+                                }
+                                /* solve overlap*/
+                                dataset.forEach(function (d1) {
+                                    if (overlap(d, d1)) {
+                                        x += (d.i.x() - d1.i.x()) / ( dataset.length);
+                                        y += (d.i.y() - d1.i.y()) / ( dataset.length);
+                                    }
+                                });
+                            }
+                            x = d.i.x() + (x - d.i.x());
+                            y = d.i.y() + (y - d.i.y());
+
                             d.i.locate(x, y);
                         }
-                )
-                ;
+                );
 
                 svga.selectAll(".photo").data(dataset, function (p) {
                             return p.FileName;
                         })
                         .transition()
-                        .duration(interval)
+                        .duration(interval).ease("linear")
                         .attrTween("transform", function (p, index) {
-//                            var from = "translate(" + p.o.translate_x + ","
-//                                    + p.o.translate_y + "),rotate("
-//                                    + p.o.rotate
-//                                    + "," + p.o.w() / 2 + "," + p.o.h() / 2
-//                                    + ")";
                             var current = d3.select(this).attr("transform");
                             var to = "translate("
                                     + p.i.translate_x + ","
                                     + p.i.translate_y + "),rotate("
                                     + p.i.rotate
                                     + "," + p.i.w() / 2 + "," + p.i.h() / 2
-                                    + ")";
+                                    + "),scale(" + p.i.rate + ")";
                             return d3.interpolateString(current, to);
                         }).each("end", judge);
             }
@@ -242,61 +254,27 @@
                 d.i = {
                     translate_x: 0,
                     translate_y: 0,
-                    rate: rate,
+                    rate: rate.default,
                     rotate: 0
                 };
-                d.o = {
-                    translate_x: 0,
-                    translate_y: 0,
-                    rate: rate,
-                    rotate: 0
-                }
-                d.backup = function () {
-                    d.o.translate_x = d.i.translate_x;
-                    d.o.translate_y = d.i.translate_y;
-                    d.o.rate = d.i.rate;
-                    d.o.rotate = d.i.rotate;
-                }
 
                 d.i.locate = function (x, y, a) {
-//                    if (isUndefined(a)) {
-//                        a = true;
-//                    }
-//                    if (a) {
-//                        d.backup();
-//                    }
                     d.i.translate_x = x - d.i.w() / 2;
                     d.i.translate_y = y - d.i.h() / 2;
                 }
                 d.i.update_rate = function (r, a) {
-//                    if (isUndefined(a)) {
-//                        a = true;
-//                    }
-//                    if (a) {
-//                        d.backup();
-//                    }
                     d.i.rate = r;
                 }
                 d.i.update_rotate = function (r, a) {
-//                    if (isUndefined(a)) {
-//                        a = true;
-//                    }
-//                    if (a) {
-//                        d.backup();
-//                    }
                     d.i.rotate = r;
                 }
                 d.i.w = function () {
                     return d.ExifImageWidth * d.i.rate;
+//                    return d.ExifImageWidth;
                 }
                 d.i.h = function () {
                     return d.ExifImageHeight * d.i.rate;
-                }
-                d.o.w = function () {
-                    return d.ExifImageWidth * d.o.rate;
-                }
-                d.o.h = function () {
-                    return d.ExifImageHeight * d.o.rate;
+//                    return d.ExifImageHeight;
                 }
 
                 /**Orientation indication
@@ -411,15 +389,15 @@
                                         + ",rotate("
                                         + p.i.rotate
                                         + "," + p.i.w() / 2 + "," + p.i.h() / 2
-                                        + ")"
+                                        + "),scale(" + p.i.rate + ")"
                                         ;
                             }
                     )
                     .attr("width", function (d) {
-                        return d.i.w();
+                        return d.ExifImageWidth;
                     })
                     .attr("height", function (d) {
-                        return d.i.h();
+                        return d.ExifImageHeight;
                     })
                     .attr("xlink:href", function (p) {
                         return base_dir + p.FileName;
