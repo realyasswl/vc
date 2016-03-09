@@ -6,5 +6,7 @@ Interactive photograph displaying system
 
 1. Download the code to your computer
 2. Use it
-# python script
+
+
+# How to use
 base_dir is the folder which contains the photos, run this py file to read exif information from photos and generates smaller images files with reduced resolution, and a csv file which will be used in index.html.
