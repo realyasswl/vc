@@ -90,7 +90,7 @@ def clean_gps_info(exif_data):
         cleaned["TimeStamp"] = get_gps_datetime(exif_data)
     except KeyError:
         cleaned = OrderedDict()
-        cleaned["Latitude"], cleaned["Longitude"] = "None","None"
+        cleaned["Latitude"], cleaned["Longitude"] = "None", "None"
         cleaned["Altitude"] = "None"
         cleaned["Speed"] = "None"
         cleaned["SpeedRef"] = "None"
@@ -100,13 +100,14 @@ def clean_gps_info(exif_data):
     return cleaned
 
 
-def print_info(dir):
+def print_and_reduce(dir, factor):
     separator = ","
+    prefix = "GED"
     tar_separator = "|"
-    exif_key_list = ["DateTime", "ExifImageHeight", "ExifImageWidth","Orientation"]
+    exif_key_list = ["DateTime", "ExifImageHeight", "ExifImageWidth", "Orientation"]
     gps_key_list = ["Latitude", "Longitude", "Altitude"]
-    pic_list = [x for x in os.listdir(dir) if x != "info.csv"]
-    f = open(dir+"info.csv", "w")
+    pic_list = [x for x in os.listdir(dir) if x != "info.csv" and not x.startswith(prefix)]
+    f = open(dir + "info.csv", "w")
     print("FileName" + separator + separator.join(exif_key_list) + separator + separator.join(gps_key_list))
     f.write("FileName" + separator + separator.join(exif_key_list) + separator + separator.join(gps_key_list))
     f.write("\n")
@@ -115,29 +116,47 @@ def print_info(dir):
             exif_data = get_exif_data(image)
             gps_info = []
             gps_info = clean_gps_info(exif_data)
+            # do resolution reduce
 
-            line = [pic_list[l]]
+            new_name = "{1}{0:04d}{2}".format(l, prefix,pic_list[l][pic_list[l].rindex("."):])
+            line = [new_name]
 
+            nw = 0
+            nh = 0
+            # nw=image.size[0]*factor
+            # nh=image.size[1]*factor
+            # image.save(new_name, dpi=(nw, nh))
             for i in exif_key_list:
                 line.append(separator)
                 try:
-                    line.append(str(exif_data[i]))
+                    if i == "ExifImageHeight":
+                        nh = factor * exif_data[i]
+                        line.append(str(nh))
+                    elif i == "ExifImageWidth":
+                        nw = factor * exif_data[i]
+                        line.append(str(nw))
+                    else:
+                        line.append(str(exif_data[i]))
                 except KeyError:
-                    if i=="ExifImageHeight":
+                    if i == "ExifImageHeight":
                         try:
-                            line.append(str(exif_data["ImageHeight"]))
+                            # line.append(str(factor * exif_data["ImageHeight"]))
+                            nh = factor * exif_data["ImageHeight"]
+                            line.append(str(nh))
                         except KeyError:
                             print("KeyError")
-                    if i=="ExifImageWidth":
+                    if i == "ExifImageWidth":
                         try:
-                            line.append(str(exif_data["ImageWidth"]))
+                            # line.append(str(factor * exif_data["ImageWidth"]))
+                            nw = factor * exif_data["ImageWidth"]
+                            line.append(str(nw))
                         except KeyError:
                             print("KeyError")
 
             for i in gps_key_list:
                 line.append(separator)
                 line.append(gps_info[i])
-            line=["None" if x is None else str(x) for x in line]
+            line = ["None" if x is None else str(x) for x in line]
             try:
                 print("".join(line))
             except TypeError:
@@ -147,6 +166,16 @@ def print_info(dir):
     f.close()
 
 
+    for l in range(len(pic_list)):
+        im = Image.open(dir + pic_list[l])
+        nw=int(im.size[0]*factor)
+        nh=int(im.size[1]*factor)
+        im = im.resize((nw,nh),Image.ANTIALIAS)
+        new_name = "{3}{1}{0:04d}{2}".format(l, prefix,pic_list[l][pic_list[l].rindex("."):],dir)
+        print(new_name,nw,nh)
+        im.save(new_name,optimize=True,quality=95)
+
+
 base_dir = "/run/media/liwang/Other/photos/photodir/"
 if __name__ == "__main__":
-    print_info(base_dir)
+    print_and_reduce(base_dir, .25)
