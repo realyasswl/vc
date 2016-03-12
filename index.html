@@ -9,11 +9,23 @@
             border: solid;
         }
 
+        .wrapper {
+            float: left;
+        }
+
         .axis path,
         .axis line {
             fill: none;
             stroke: #557799;
             shape-rendering: crispEdges;
+        }
+
+        .info {
+            margin: 40px 4px 0 4px;
+            float: right;
+            width: 112px;
+            height: 40px;
+            color: #7fdbff;
         }
     </style>
     <script src="static/d3.js" charset="utf-8"></script>
@@ -26,18 +38,28 @@
             bottom: margin_length, left: margin_length
         };
         //        var v = {height: 920, width: 1900};
-        var v = {height: 800, width: 1700};
+        var v = {height: 940, width: 1700};
         var o = {x: 0, y: 0, h: v.height, w: v.width};
         var base_dir = "photodir/";
         var info_file = "info.csv";
         var dataset;
-        var rate = {max: 1, min: .1, default: .3, step: .01};
-        var interval = 500;
+        var coverage = {max: .82, min: .75, stable: .81};
+        var rate = {max: 1, min: .02, default: .3, step: .01, selected: .8};
+        var interval = 50;
         //        canvas
         var svga;
         var x = d3.scale.linear().range([0, v.width]).domain([0, v.width]);
         var y = d3.scale.linear().range([0, v.height]).domain([0, v.height]);
         var modi = d3.scale.linear().range([0, 3]).domain([3, 0]);
+        function cal_coverage() {
+            var total_area = v.height * v.width;
+            var cover_area = 0.0;
+            dataset.forEach(function (d) {
+                cover_area += d.i.rate * d.ExifImageWidth * d.i.rate * d.ExifImageHeight;
+            });
+            cvr = cover_area / total_area;
+        }
+        var cvr = 0.0;
         d3.csv(base_dir + info_file, function (error, data) {
             if (error) throw error;
             dataset = data.slice();
@@ -102,114 +124,7 @@
         function draw_gallery() {
             init();
             console.dir(dataset);
-            judge();
-
-            function judge() {
-                if (dataset.some(function (d0) {
-                            return exceeds(d0, o)
-                                    || (dataset.some(function (d1) {
-                                                return overlap(d0, d1);
-                                            })
-//                                    && d0.i.rate < rate.max-rate.step
-                                    );
-                        })) {
-                    cycle();
-                }
-            }
-
-            function cycle() {
-                dataset.sort(function (a, b) {
-                    var ea = exceeds(a, o), eb = exceeds(b, o);
-                    if (ea && !eb) {
-                        return 1;
-                    }
-                    if (eb && !ea) {
-                        return -1;
-                    }
-                    return 0;
-                }).forEach(function (d) {
-                            var x = d.i.x(), y = d.i.y();
-                            var t, r, b, l = false;
-                            /*solve exceeds*/
-
-                            if (0 < 0 - d.i.top().y) {
-                                t = true;
-                                y += 0 - d.i.top().y;
-                            }
-                            if (0 > v.width - d.i.right().x) {
-                                r = true;
-                                x += v.width - d.i.right().x;
-                            }
-                            if (0 > v.height - d.i.bottom().y) {
-                                b = true;
-                                y += v.height - d.i.bottom().y;
-                            }
-                            if (0 < 0 - d.i.left().x) {
-                                l = true;
-                                x += 0 - d.i.left().x;
-                            }
-
-                            var adjacent = dataset.filter(function (d1) {
-                                return overlap(d, d1);
-                            }).slice();
-//                            console.log(adjacent.length);
-                            if (adjacent.length == 0) {
-                                if (d.i.rate < rate.max) {
-                                    d.i.update_rate(d.i.rate + rate.step);
-                                }
-                            } else {
-                                if (d.i.rate > rate.min) {
-                                    d.i.update_rate(d.i.rate - rate.step);
-                                }
-                                /* solve overlap*/
-                                dataset.forEach(function (d1) {
-                                    if (overlap(d, d1)) {
-                                        x += (d.i.x() - d1.i.x()) / ( dataset.length);
-                                        y += (d.i.y() - d1.i.y()) / ( dataset.length);
-                                    }
-                                });
-                            }
-                            x = d.i.x() + (x - d.i.x());
-                            y = d.i.y() + (y - d.i.y());
-
-                            d.i.locate(x, y);
-                        }
-                );
-
-                svga.selectAll(".photo").data(dataset, function (p) {
-                            return p.FileName;
-                        })
-                        .transition()
-                        .duration(interval).ease("linear")
-                        .attrTween("transform", function (p, index) {
-                            var current = d3.select(this).attr("transform");
-                            var to = "translate("
-                                    + p.i.translate_x + ","
-                                    + p.i.translate_y + "),rotate("
-                                    + p.i.rotate
-                                    + "," + p.i.w() / 2 + "," + p.i.h() / 2
-                                    + "),scale(" + p.i.rate + ")";
-                            return d3.interpolateString(current, to);
-                        }).each("end", judge);
-            }
-
-
-            //                    .tween("width", photoTween);
-            //            function photoTween(d, i, a) {
-            //                return function (t) {
-            //                    this.width = 1234;
-            //                }
-            //            }
-
-
-            //                    .attr("transform", function (p, i) {
-            //                                return "translate(" + p.i.translate_x + ","
-            //                                        + p.i.translate_y + "),rotate("
-            //                                        + p.i.rotate
-            //                                        + "," + p.i.w() / 2 + "," + p.i.h() / 2
-            //                                        + ")";
-            //                            }
-            //                    );
+            judge0(0);
         }
         function overlap(d0, d1) {
             return doPolygonsIntersect(d0.i.vertexes(), d1.i.vertexes())
@@ -255,8 +170,15 @@
                     translate_x: 0,
                     translate_y: 0,
                     rate: rate.default,
-                    rotate: 0
+                    rotate: 0,
+                    selected: false
                 };
+                d.i.select = function () {
+                    dataset.forEach(function (di) {
+                        di.i.selected = false;
+                    })
+                    d.i.selected = true;
+                }
 
                 d.i.locate = function (x, y, a) {
                     d.i.translate_x = x - d.i.w() / 2;
@@ -374,34 +296,26 @@
 
             svga.selectAll(".photo").data(dataset, function (p) {
                 return p.FileName;
-            }).enter().append("image")
-                    .attr("class", "photo")
-                    .attr("transform", function (p, i) {
-//                                console.log(p.i.center());
-//                                console.log(p.i.translate_x, p.i.translate_y);
-//                                console.log(p.i.top());
-//                                console.log(p.i.right());
-//                                console.log(p.i.bottom());
-//                                console.log(p.i.left());
-
-                                return "translate(" + p.i.translate_x + ","
-                                        + p.i.translate_y + ")"
-                                        + ",rotate("
-                                        + p.i.rotate
-                                        + "," + p.i.w() / 2 + "," + p.i.h() / 2
-                                        + "),scale(" + p.i.rate + ")"
-                                        ;
-                            }
-                    )
-                    .attr("width", function (d) {
-                        return d.ExifImageWidth;
-                    })
-                    .attr("height", function (d) {
-                        return d.ExifImageHeight;
-                    })
-                    .attr("xlink:href", function (p) {
-                        return base_dir + p.FileName;
-                    });
+            }).enter().append("image").attr("transform", function (p, i) {
+                return "translate(" + p.i.translate_x + ","
+                        + p.i.translate_y + ")"
+                        + ",rotate("
+                        + p.i.rotate
+                        + "," + p.i.w() / 2 + "," + p.i.h() / 2
+                        + "),scale(" + p.i.rate + ")"
+                        ;
+            }).attr("width", function (d) {
+                return d.ExifImageWidth;
+            }).attr("height", function (d) {
+                return d.ExifImageHeight;
+            }).attr("xlink:href", function (p) {
+                return base_dir + p.FileName;
+            }).on("click", function (d) {
+                d.i.select();
+                d.i.update_rate(rate.selected);
+                d.i.locate(v.width / 2, v.height / 2);
+                judge0(0);
+            }).attr("class", "photo");
 
             //            svga.selectAll(".test2").data(dataset, function (p) {
             //                return p.FileName;
@@ -489,9 +403,118 @@
         function deg2rad(d) {
             return d * Math.PI / 180;
         }
+
+        //this function is called after the system init, to solve excceed and overlap
+        function judge0(count) {
+            if ((cvr > coverage.stable && dataset.every(function (d0) {
+                        return !exceeds(d0, o) &&
+                                dataset.every(function (d1) {
+                                    return !overlap(d0, d1);
+                                });
+                    }))
+                    || count > 200) {
+                console.log("stable at step:" + count);
+                update_draw(count);
+            } else {
+                cycle(count);
+            }
+        }
+
+        function cycle(count) {
+            cal_coverage();
+            update_draw(count);
+            setTimeout(function () {
+                dataset.sort(function (a, b) {
+                    var ea = exceeds(a, o), eb = exceeds(b, o);
+                    if (ea && !eb) {
+                        return 1;
+                    }
+                    if (eb && !ea) {
+                        return -1;
+                    }
+                    return 0;
+                }).forEach(function (d) {
+                    var x = d.i.x(), y = d.i.y();
+                    var t, r, b, l = false;
+                    /*solve exceeds*/
+
+                    if (0 < 0 - d.i.top().y) {
+                        t = true;
+                        y += 0 - d.i.top().y;
+                    }
+                    if (0 > v.width - d.i.right().x) {
+                        r = true;
+                        x += v.width - d.i.right().x;
+                    }
+                    if (0 > v.height - d.i.bottom().y) {
+                        b = true;
+                        y += v.height - d.i.bottom().y;
+                    }
+                    if (0 < 0 - d.i.left().x) {
+                        l = true;
+                        x += 0 - d.i.left().x;
+                    }
+
+                    var adjacent = dataset.filter(function (d1) {
+                        return overlap(d, d1);
+                    }).slice();
+                    if (adjacent.length == 0) {
+                        if (d.i.rate < rate.max && cvr < coverage.max && !d.i.selected) {
+                            d.i.update_rate(d.i.rate + rate.step);
+                        }
+                    } else {
+                        /* solve overlap*/
+                        dataset.forEach(function (d1) {
+                            if (overlap(d, d1)) {
+//we see this rectangle as a circle with radius (width+height)/2 to make this process easier
+                                var r = (d.i.w() + d.i.h()) / 2;
+                                var r1 = (d1.i.w() + d1.i.h()) / 2;
+//vx and vy denote the move direction vector
+                                var vx = d.i.x() - d1.i.x();
+                                var vy = d.i.y() - d1.i.y();
+//min distance between two circles to ensure no overlap
+                                var vd = Math.sqrt(vx * vx + vy * vy);
+                                x += (vx / vd) * (r + r1 - vd) / (dataset.length);
+                                y += (vy / vd) * (r + r1 - vd) / ( dataset.length);
+                            }
+                        });
+
+                        if (d.i.rate > rate.min && cvr > coverage.min && !d.i.selected) {
+                            d.i.update_rate(d.i.rate - rate.step / 2);
+                        }
+                    }
+                    x = d.i.x() + (x - d.i.x());
+                    y = d.i.y() + (y - d.i.y());
+
+                    d.i.locate(x, y);
+                });
+                judge0(count + 1);
+            }, 0);
+        }
+
+        function update_draw(count) {
+            d3.select(".cvr").text(Math.round(cvr * 1000) / 1000);
+            d3.select(".cnt").text(count);
+            svga.selectAll(".photo").data(dataset, function (p) {
+                return p.FileName;
+            }).transition().duration(interval).ease("linear").attrTween("transform", function (p, index) {
+                var current = d3.select(this).attr("transform");
+                var to = "translate("
+                        + p.i.translate_x + ","
+                        + p.i.translate_y + "),rotate("
+                        + p.i.rotate
+                        + "," + p.i.w() / 2 + "," + p.i.h() / 2
+                        + "),scale(" + p.i.rate + ")";
+                return d3.interpolateString(current, to);
+            });
+        }
     </script>
 </head>
 <body>
 <div class="wrapper"></div>
+<div class="info">
+    <h2 class="cvr"></h2>
+    <h2 class="cnt"></h2>
+</div>
 </body>
 </html>
