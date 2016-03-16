@@ -38,13 +38,21 @@
             bottom: margin_length, left: margin_length
         };
         //        var v = {height: 920, width: 1900};
-        var v = {height: 940, width: 1700};
+
+
+        //this variables is used to construct two rectangles:
+        // the attract is to hold related pics inside, the push is to push nonrelated pics outside
+        var scale_rate = {attract: 1.3, push: 1.5};
+
+        var v = {height: 980, width: 1700};
         var o = {x: 0, y: 0, h: v.height, w: v.width};
-        var base_dir = "photodir/";
+        //        var base_dir = "mingphoto/Archive/";
+        //        var base_dir = "photodir/";
+        var base_dir = "xiphoto/test/";
         var info_file = "info.csv";
         var dataset;
-        var coverage = {max: .82, min: .75, stable: .81};
-        var rate = {max: 1, min: .02, default: .3, step: .01, selected: .8};
+        var coverage = {max: .82, min: .25, stable: .81};
+        var rate = {max: 1, min: .01, default: .3, step: .005, selected: .55};
         var interval = 50;
         //        canvas
         var svga;
@@ -59,6 +67,8 @@
             });
             cvr = cover_area / total_area;
         }
+        //record the coverage rate, more precisely, we sum all pictures' area and
+        // divide it by the area of displaying plant
         var cvr = 0.0;
         d3.csv(base_dir + info_file, function (error, data) {
             if (error) throw error;
@@ -127,7 +137,12 @@
             judge0(0);
         }
         function overlap(d0, d1) {
-            return doPolygonsIntersect(d0.i.vertexes(), d1.i.vertexes())
+            return doPolygonsIntersect(d0.i.vertexes(), d1.i.selected ? d1.i.vertexes().map(function (k) {
+                        return {
+                            x: d1.i.center().x + scale_rate.push * (k.x - d1.i.center().x),
+                            y: d1.i.center().y + scale_rate.push * (k.y - d1.i.center().y)
+                        }
+                    }) : d1.i.vertexes())
                     && (d0.FileName != d1.FileName);
         }
         function base() {
@@ -311,11 +326,23 @@
             }).attr("xlink:href", function (p) {
                 return base_dir + p.FileName;
             }).on("click", function (d) {
-                d.i.select();
-                d.i.update_rate(rate.selected);
-                d.i.locate(v.width / 2, v.height / 2);
-                judge0(0);
-            }).attr("class", "photo");
+                        dataset.forEach(function (d0) {
+                            if (d0.i.selected) {
+                                var cent = d.i.center();
+                                d0.i.update_rate(d.i.rate);
+                                d0.i.locate(cent.x, cent.y);
+                                d0.i.update_rate(rate.default);
+                            }
+                        })
+                        d.i.select();
+                        d.i.update_rate(rate.selected);
+                        d.i.locate(v.width / 2, v.height / 2);
+                        judge0(0);
+                    })
+                    //                    .on("mouseover", function (d) {
+                    //                        console.log(d.i.center());
+                    //                    })
+                    .attr("class", "photo");
 
             //            svga.selectAll(".test2").data(dataset, function (p) {
             //                return p.FileName;
@@ -404,9 +431,11 @@
             return d * Math.PI / 180;
         }
 
-        //this function is called after the system init, to solve excceed and overlap
+        //this function is called after the system init, to solve exceed and overlap
         function judge0(count) {
-            if ((cvr > coverage.stable && dataset.every(function (d0) {
+            if (((dataset.some(function (d) {
+                        return d.i.selected;
+                    }) || cvr > coverage.stable) && dataset.every(function (d0) {
                         return !exceeds(d0, o) &&
                                 dataset.every(function (d1) {
                                     return !overlap(d0, d1);
@@ -424,7 +453,9 @@
             cal_coverage();
             update_draw(count);
             setTimeout(function () {
-                dataset.sort(function (a, b) {
+                dataset.filter(function (d) {
+                    return !d.i.selected;
+                }).sort(function (a, b) {
                     var ea = exceeds(a, o), eb = exceeds(b, o);
                     if (ea && !eb) {
                         return 1;
@@ -434,26 +465,11 @@
                     }
                     return 0;
                 }).forEach(function (d) {
-                    var x = d.i.x(), y = d.i.y();
-                    var t, r, b, l = false;
                     /*solve exceeds*/
+                    var solved = solve_exceeds(o, d);
+                    var x = solved.x;
+                    var y = solved.y;
 
-                    if (0 < 0 - d.i.top().y) {
-                        t = true;
-                        y += 0 - d.i.top().y;
-                    }
-                    if (0 > v.width - d.i.right().x) {
-                        r = true;
-                        x += v.width - d.i.right().x;
-                    }
-                    if (0 > v.height - d.i.bottom().y) {
-                        b = true;
-                        y += v.height - d.i.bottom().y;
-                    }
-                    if (0 < 0 - d.i.left().x) {
-                        l = true;
-                        x += 0 - d.i.left().x;
-                    }
 
                     var adjacent = dataset.filter(function (d1) {
                         return overlap(d, d1);
@@ -469,13 +485,16 @@
 //we see this rectangle as a circle with radius (width+height)/2 to make this process easier
                                 var r = (d.i.w() + d.i.h()) / 2;
                                 var r1 = (d1.i.w() + d1.i.h()) / 2;
+
+                                r1 = d1.i.selected ? r1 * scale_rate.push : r1;
+
 //vx and vy denote the move direction vector
                                 var vx = d.i.x() - d1.i.x();
                                 var vy = d.i.y() - d1.i.y();
 //min distance between two circles to ensure no overlap
                                 var vd = Math.sqrt(vx * vx + vy * vy);
-                                x += (vx / vd) * (r + r1 - vd) / (dataset.length);
-                                y += (vy / vd) * (r + r1 - vd) / ( dataset.length);
+                                x += vd == 0 ? 0 : ( vx / vd) * (r + r1 - vd) / (dataset.length);
+                                y += vd == 0 ? 0 : ( vy / vd) * (r + r1 - vd) / (dataset.length);
                             }
                         });
 
@@ -495,6 +514,16 @@
         function update_draw(count) {
             d3.select(".cvr").text(Math.round(cvr * 1000) / 1000);
             d3.select(".cnt").text(count);
+            update_draw_dataset(dataset, interval);
+        }
+
+        function get_related(d) {
+            return dataset.filter(function (d0) {
+                return Math.random() > 0.7;
+            }).slice();
+        }
+
+        function update_draw_dataset(dataset, interval) {
             svga.selectAll(".photo").data(dataset, function (p) {
                 return p.FileName;
             }).transition().duration(interval).ease("linear").attrTween("transform", function (p, index) {
@@ -507,6 +536,27 @@
                         + "),scale(" + p.i.rate + ")";
                 return d3.interpolateString(current, to);
             });
+        }
+        //o is the container rectangle, d is the displaying pic
+        function solve_exceeds(o, d) {
+            var x = d.i.x(), y = d.i.y();
+            if (0 < o.y - d.i.top().y) {
+                t = true;
+                y += o.y - d.i.top().y;
+            }
+            if (0 > o.w - d.i.right().x) {
+                r = true;
+                x += o.w - d.i.right().x;
+            }
+            if (0 > o.h - d.i.bottom().y) {
+                b = true;
+                y += o.h - d.i.bottom().y;
+            }
+            if (0 < o.x - d.i.left().x) {
+                l = true;
+                x += o.x - d.i.left().x;
+            }
+            return {x: x, y: y};
         }
     </script>
 </head>
