@@ -11,7 +11,11 @@ from PIL.ExifTags import TAGS, GPSTAGS
 
 def get_exif_data(image):
     """Returns a dictionary from the exif data of an PIL Image item. Also converts the GPS Tags"""
-    info = image._getexif()
+
+    try:
+        info = image._getexif()
+    except AttributeError:
+        return {}
     if not info:
         return {}
     exif_data = {TAGS.get(tag, tag): value for tag, value in info.items()}
@@ -118,8 +122,12 @@ def print_and_reduce(dir, factor):
             gps_info = clean_gps_info(exif_data)
             # do resolution reduce
 
-            new_name = "{1}{0:04d}{2}".format(l, prefix,pic_list[l][pic_list[l].rindex("."):])
+            new_name = "{1}{0:04d}{2}".format(l, prefix, pic_list[l][pic_list[l].rindex("."):])
             line = [new_name]
+            siz = image.size
+            w = siz[0]
+            h = siz[1]
+            print(siz)
 
             nw = 0
             nh = 0
@@ -128,6 +136,7 @@ def print_and_reduce(dir, factor):
             # image.save(new_name, dpi=(nw, nh))
             for i in exif_key_list:
                 line.append(separator)
+
                 try:
                     if i == "ExifImageHeight":
                         nh = factor * exif_data[i]
@@ -141,14 +150,16 @@ def print_and_reduce(dir, factor):
                     if i == "ExifImageHeight":
                         try:
                             # line.append(str(factor * exif_data["ImageHeight"]))
-                            nh = factor * exif_data["ImageHeight"]
+                            # nh = factor * exif_data["ImageHeight"]
+                            nh=factor*h
                             line.append(str(nh))
                         except KeyError:
                             print("KeyError")
                     if i == "ExifImageWidth":
                         try:
                             # line.append(str(factor * exif_data["ImageWidth"]))
-                            nw = factor * exif_data["ImageWidth"]
+                            # nw = factor * exif_data["ImageWidth"]
+                            nw=factor*w
                             line.append(str(nw))
                         except KeyError:
                             print("KeyError")
@@ -165,17 +176,16 @@ def print_and_reduce(dir, factor):
             f.write("\n")
     f.close()
 
-
     for l in range(len(pic_list)):
         im = Image.open(dir + pic_list[l])
-        nw=int(im.size[0]*factor)
-        nh=int(im.size[1]*factor)
-        im = im.resize((nw,nh),Image.ANTIALIAS)
-        new_name = "{3}{1}{0:04d}{2}".format(l, prefix,pic_list[l][pic_list[l].rindex("."):],dir)
-        print(new_name,nw,nh)
-        im.save(new_name,optimize=True,quality=95)
+        nw = int(im.size[0] * factor)
+        nh = int(im.size[1] * factor)
+        im = im.resize((nw, nh), Image.ANTIALIAS)
+        new_name = "{3}{1}{0:04d}{2}".format(l, prefix, pic_list[l][pic_list[l].rindex("."):], dir)
+        print(new_name, nw, nh)
+        im.save(new_name, optimize=True, quality=95)
 
 
-base_dir = "/run/media/liwang/Other/photos/photodir/"
+base_dir = "/run/media/liwang/Other/photos/xiphoto/test/"
 if __name__ == "__main__":
-    print_and_reduce(base_dir, .25)
+    print_and_reduce(base_dir, 1)

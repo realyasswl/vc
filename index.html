@@ -79,58 +79,6 @@
             dataset = data.slice();
             base();
             draw_gallery();
-
-            /**test area*
-             svga.append("image")
-             .attr("class", "test1")
-             .attr("transform", "translate(100,100),rotate(0,204,153),scale("+rate.default+")")
-             //             .attr("width", 408)
-             //             .attr("height", 306)
-             .attr("width", 3264)
-             .attr("height", 2448)
-             .attr("xlink:href", "photodir/2015-02-18 124445.jpg");
-             svga.append("line")
-             .attr("class", "test2")
-             .attr("x1", 0)
-             .attr("y1", 0)
-             .attr("x2", 408)
-             .attr("y2", 306)
-             .attr("transform", "translate(100,100),rotate(90,204,153)")
-             .attr("stroke", "black")
-             .attr("stroke-width", 1);
-             cycle();
-             function cycle() {
-                svga.select(".test1").transition().duration(interval)
-                        .attrTween("transform", function () {
-                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(100,100),rotate(180,204,153),scale("+rate.default+")");
-                                }
-                        ).each("end", cycle1);
-            }
-
-             function cycle1() {
-                svga.select(".test1").transition().duration(interval)
-                        .attrTween("transform", function () {
-                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(200,200),rotate(180,204,153),scale("+rate.default+")");
-                                }
-                        ).each("end", cycle2);
-            }
-
-             function cycle2() {
-                svga.select(".test1").transition().duration(interval)
-                        .attrTween("transform", function () {
-                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(200,200),rotate(360,204,153),scale("+rate.default+")");
-                                }
-                        ).each("end", cycle3);
-            }
-             function cycle3() {
-                svga.select(".test1").transition().duration(interval)
-                        .attrTween("transform", function () {
-                                    return d3.interpolateString(d3.select(this).attr("transform"), "translate(100,100),rotate(0,204,153),scale("+rate.default+")");
-                                }
-                        ).each("end", cycle);
-            }
-
-             /**test area*/
         })
         function exceeds(d, o) {
             return d.i.top().y < o.y || d.i.right().x > o.x + o.w || d.i.bottom().y > o.y + o.h || d.i.left().x < o.x;
@@ -310,8 +258,6 @@
                 var x = Math.random() * v.width;
                 var y = Math.random() * v.height;
                 d.i.locate(x, y);
-//                i == 0 ? d.i.locate(20, 500) : d.i.locate(40, 540);
-//                d.i.update_rotate(Math.random() * 360 - 180);
             });
 
             svga.selectAll(".photo").data(dataset, function (p) {
@@ -385,24 +331,8 @@
 
                         judge0(0);
                     })
-                    //                    .on("mouseover", function (d) {
-                    //                        console.log(d.i.center());
-                    //                    })
                     .attr("class", "photo");
 
-            //            svga.selectAll(".test2").data(dataset, function (p) {
-            //                return p.FileName;
-            //            }).enter().append("line")
-            //                    .attr("class", "test2")
-            //                    .attr("x1", 0)
-            //                    .attr("y1", 0)
-            //                    .attr("x2", function(d){return  d.i.w();})
-            //                    .attr("y2", function(d){return  d.i.h();})
-            //                    .attr("transform", function(d){
-            //                        return "translate("+d.i.translate_x+","+d.i.translate_y+"),rotate(0,"+d.i.w()/2+","+d.i.h()/2+")";
-            //                    })
-            //                    .attr("stroke", "black")
-            //                    .attr("stroke-width", 1);
         }
         /**
          * Helper function to determine whether there is an intersection between the two polygons described
