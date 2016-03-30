@@ -104,7 +104,7 @@ def clean_gps_info(exif_data):
     return cleaned
 
 
-def print_and_reduce(dir, factor):
+def print_and_reduce(dir, aw):
     separator = ","
     prefix = "GED"
     tar_separator = "|"
@@ -129,8 +129,8 @@ def print_and_reduce(dir, factor):
             h = siz[1]
             print(siz)
 
-            nw = 0
-            nh = 0
+            nw = aw
+            nh = aw / w * h;
             # nw=image.size[0]*factor
             # nh=image.size[1]*factor
             # image.save(new_name, dpi=(nw, nh))
@@ -139,10 +139,10 @@ def print_and_reduce(dir, factor):
 
                 try:
                     if i == "ExifImageHeight":
-                        nh = factor * exif_data[i]
+                        # nh = factor * exif_data[i]
                         line.append(str(nh))
                     elif i == "ExifImageWidth":
-                        nw = factor * exif_data[i]
+                        # nw = factor * exif_data[i]
                         line.append(str(nw))
                     else:
                         line.append(str(exif_data[i]))
@@ -151,7 +151,7 @@ def print_and_reduce(dir, factor):
                         try:
                             # line.append(str(factor * exif_data["ImageHeight"]))
                             # nh = factor * exif_data["ImageHeight"]
-                            nh=factor*h
+                            # nh = factor * h
                             line.append(str(nh))
                         except KeyError:
                             print("KeyError")
@@ -159,7 +159,7 @@ def print_and_reduce(dir, factor):
                         try:
                             # line.append(str(factor * exif_data["ImageWidth"]))
                             # nw = factor * exif_data["ImageWidth"]
-                            nw=factor*w
+                            # nw = factor * w
                             line.append(str(nw))
                         except KeyError:
                             print("KeyError")
@@ -178,8 +178,12 @@ def print_and_reduce(dir, factor):
 
     for l in range(len(pic_list)):
         im = Image.open(dir + pic_list[l])
-        nw = int(im.size[0] * factor)
-        nh = int(im.size[1] * factor)
+        siz = im.size
+        w = siz[0]
+        h = siz[1]
+
+        nw = aw
+        nh = int(aw / w * h);
         im = im.resize((nw, nh), Image.ANTIALIAS)
         new_name = "{3}{1}{0:04d}{2}".format(l, prefix, pic_list[l][pic_list[l].rindex("."):], dir)
         print(new_name, nw, nh)
@@ -188,4 +192,4 @@ def print_and_reduce(dir, factor):
 
 base_dir = "/run/media/liwang/Other/photos/xiphoto/test/"
 if __name__ == "__main__":
-    print_and_reduce(base_dir, 1)
+    print_and_reduce(base_dir, aw=540)
