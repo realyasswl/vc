@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dynamic display system</title>
+    <link rel="stylesheet" href="static/style.css">
+    <style>
+        body {
+            background-color: #eeeeee;
+        }
+
+        .photo {
+            border: solid;
+        }
+
+        .wrapper {
+            float: left;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #557799;
+            shape-rendering: crispEdges;
+        }
+
+        .info {
+            margin: 40px 4px 0 4px;
+            float: right;
+            width: 112px;
+            height: 40px;
+            color: #7fdbff;
+        }
+
+        .hline {
+            stroke: black;
+            stroke-width: 1px;
+        }
+
+        .vline {
+            stroke: black;
+            stroke-width: 1px;
+        }
+    </style>
+    <script src="static/numeric-1.2.6.js" charset="utf-8"></script>
+    <script src="static/d3.js" charset="utf-8"></script>
+    <script src="static/li.js" charset="utf-8"></script>
+    <script src="static/jquery-2.2.0.js" charset="utf-8"></script>
+    <script>
+        //variable that controls output of logs in console and auxiliary line in the interface
+        var debug = true;
+        var margin_length = 40;
+        var margin = {
+            top: margin_length, right: margin_length,
+            bottom: margin_length, left: margin_length
+        };
+
+        //this variables is used to construct two rectangles:
+        // the attract is to hold related pics inside, the push is to push nonrelated pics outside
+        var scale_rate = {attract: 2, push: 2.5};
+
+        //this is the size of display plane
+        var v = {height: 800, width: 1600};
+
+        //pixel length
+        var pl = 40;
+        //        pixel matrix
+        //        each element in the matrix is a array in which store the id(s) of the photo that cover this pixel
+        //        having more than one element in the list means overlapping.
+        //        pm[j][i] represents the cell located at j-th row and i-th column
+        var pm = new Array(v.height / pl + 1).join('0').split('').map(function () {
+            return new Array(v.width / pl + 1).join('0').split('').map(function () {
+                return [];
+            });
+        });
+
+        var t_i = 0;
+        while (t_i < v.height) {
+//            console.log(t_i + "," + Math.floor(t_i / pl));
+            t_i++;
+        }
+
+        var coverage = {max: .82, min: .25, stable: .81};
+        var rate = {max: .9, min: .05, default: .3, step: .035, selected: 1};
+
+        var o = {x: 0, y: 0, h: v.height, w: v.width};
+
+        var step = 30;
+        //        var base_dir = "mingphoto/Archive/";
+        //        var base_dir = "photodir/";
+        var base_dir = "xiphoto/test/";
+        //                var base_dir = "temp/";
+        var info_file = "info.csv";
+
+        var sim_info_hist = "sim_info_hist.csv";
+        var sim_info_cosine = "sim_info_cosine.csv";
+        var sim_info_ghc = "sim_info_ghc.csv";
+        var sim_matrix;
+        var dataset;
+        var push_vertexes = [];
+        //        var push_vertexes = [
+        //            {x: 175, y: 42.922},
+        //            {x: 1525, y: 42.922},
+        //            {x: 1525, y: 937.078},
+        //            {x: 175, y: 937.078}];
+        //        puhlic variable that store the related pictures list
+        var related = [];
+        //        var selected = {h: 715.325, w: 1080, x: 310, y: 132.338};
+        var selected = {};
+        var interval = 1200;
+        var interval_sub = 100;
+        //        canvas
+        var svga;
+        var x = d3.scale.linear().range([0, v.width]).domain([0, v.width]);
+        var y = d3.scale.linear().range([0, v.height]).domain([0, v.height]);
+        var modi = d3.scale.linear().range([0, 3]).domain([3, 0]);
+        function cal_coverage() {
+            var total_area = v.height * v.width;
+            var cover_area = 0.0;
+            dataset.forEach(function (d) {
+                cover_area += d.i.rate * d.ExifImageWidth * d.i.rate * d.ExifImageHeight;
+            });
+            cvr = cover_area / total_area;
+        }
+        //record the coverage rate, more precisely, we sum all pictures' area and
+        // divide it by the area of displaying plane
+        var cvr = 0.0;
+
+        d3.text(base_dir + sim_info_hist, function (text) {
+            var data = d3.csv.parseRows(text).map(function (row) {
+                return row.map(function (value) {
+                    return +value;
+                });
+            });
+//            console.log(data);
+            sim_matrix = data.slice();
+        });
+
+        d3.csv(base_dir + info_file, function (error, data) {
+            if (error) throw error;
+            dataset = data.slice();
+            base();
+            draw_gallery();
+        })
+        function exceeds(d, o) {
+            return d.i.top().y < o.y || d.i.right().x > o.x + o.w || d.i.bottom().y > o.y + o.h || d.i.left().x < o.x;
+        }
+        function draw_gallery() {
+            init();
+//            console.dir(dataset);
+            judge0(0);
+        }
+        function overlap(d0, d1) {
+            return doPolygonsIntersect(d0.i.vertexes(),
+                            d1.i.selected && ($.inArray(d0.i.id, related)) < 0 ? push_vertexes : d1.i.vertexes())
+                    && (d0.FileName != d1.FileName);
+        }
+        function base() {
+            svga = d3.select(".wrapper").append("svg")
+                    .attr("width", v.width + margin.left + margin.right)
+                    .attr("height", v.height + margin.top + margin.bottom)
+                    .append("g").attr("class", "g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+            var xAxis = d3.svg.axis().scale(x)
+                    .orient("top");
+
+            var yAxis = d3.svg.axis().scale(y)
+                    .orient("left");
+            svga.append("g")
+                    .attr("class", "x axis")
+                    //                    .attr("transform", "translate(0," + 2 * radius + ")")
+                    .call(xAxis)
+                    .append("text")
+                    .attr("class", "label")
+                    .attr("x", v.width)
+                    .attr("y", -6)
+                    .style("text-anchor", "end")
+                    .text("x axis");
+
+            svga.append("g")
+                    .attr("class", "y axis")
+                    .call(yAxis)
+                    .append("text")
+                    .attr("class", "label")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", -12)
+                    .attr("x", 12 - v.height)
+                    .attr("dy", ".71em")
+                    .style("text-anchor", "end")
+                    .text("y axis");
+            if (debug) {
+                var hlist = new Array(v.width / pl + 1).join('0').split('').map(function (d, i) {
+                    return i + 1;
+                });
+                var vlist = new Array(v.height / pl + 1).join('0').split('').map(function (d, i) {
+                    return i + 1;
+                })
+                svga.selectAll(".hline").data(hlist, function (d) {
+                    return d;
+                }).enter().append("path").attr("class", "hline").attr("d", function (d) {
+                    return "M" + d * pl + " 0L" + d * pl + " " + v.height;
+                });
+                svga.selectAll(".vline").data(vlist, function (d) {
+                    return d;
+                }).enter().append("path").attr("class", "vline").attr("d", function (d) {
+                    return "M0 " + d * pl + "L" + v.width + " " + d * pl;
+                });
+            }
+        }
+        function init() {
+            dataset.forEach(function (d) {
+                d.i = {
+                    id: parseInt(d.FileName.substr(3, 4)),
+                    translate_x: 0,
+                    translate_y: 0,
+                    rate: rate.default,
+                    rotate: 0,
+                    selected: false
+                };
+                d.i.select = function () {
+                    dataset.forEach(function (di) {
+                        di.i.selected = false;
+                    });
+                    d.i.selected = true;
+                };
+
+                d.i.locate = function (x, y, a) {
+                    d.i.translate_x = x - d.i.w() / 2;
+                    d.i.translate_y = y - d.i.h() / 2;
+                    var pmi = d.i.toPixel();
+                    var j1 = pmi[1][0];
+                    var j2 = pmi[1][1];
+                    var i1 = pmi[0][0];
+                    var i2 = pmi[0][1];
+
+                    pm.forEach(function (p, j) {
+                        if (j >= j1 && j <= j2) {
+                            p.forEach(function (p1, i) {
+                                var index = p1.indexOf(d.i.id);
+                                if (i >= i1 && i <= i2) {
+                                    if (index < 0) {
+                                        p1.push(d.i.id);
+                                    }
+                                } else {
+                                    if (index >= 0) {
+                                        p1.splice(index, 1);
+                                    }
+                                }
+                            });
+                        } else {
+                            p.forEach(function (p1, i) {
+                                var index = p1.indexOf(d.i.id);
+                                if (index >= 0) {
+                                    p1.splice(index, 1);
+                                }
+                            });
+                        }
+                    });
+                };
+                d.i.update_rate = function (r, a) {
+                    d.i.rate = r;
+                };
+                d.i.update_rotate = function (r, a) {
+                    d.i.rotate = r;
+                };
+                d.i.width = function () {
+                    if (d.i.rotate / 180.0 == 0) {
+                        return d.i.w();
+                    } else {
+                        return d.i.h();
+                    }
+                };
+                d.i.height = function () {
+                    if (d.i.rotate / 180.0 == 0) {
+                        return d.i.h();
+                    } else {
+                        return d.i.w();
+                    }
+                }
+                d.i.w = function () {
+                    return d.ExifImageWidth * d.i.rate;
+//                    return d.ExifImageWidth;
+                };
+                d.i.h = function () {
+                    return d.ExifImageHeight * d.i.rate;
+//                    return d.ExifImageHeight;
+                };
+
+                /**Orientation indication
+                 1        2       3      4         5            6           7          8
+
+                 888888  888888      88  88      8888888888  88                  88  8888888888
+                 88          88      88  88      88  88      88  88          88  88      88  88
+                 8888      8888    8888  8888    88          8888888888  8888888888          88
+                 88          88      88  88
+                 88          88  888888  888888
+                 */
+                switch (d.Orientation) {
+                    case "1":
+                        d.i.rotate = 0;
+                        break;
+                    case "3":
+                        d.i.rotate = 180;
+                        break;
+                    case "6":
+                        d.i.rotate = 90;
+                        break;
+                    case "8":
+                        d.i.rotate = -90;
+                        break;
+                    default:
+                        d.i.rotate = 0;
+                }
+                d.i.x = function () {
+                    return d.i.center().x;
+                };
+                d.i.y = function () {
+                    return d.i.center().y;
+                };
+                // distance from one vertex to center of the rectangle
+                d.i.radius = function () {
+                    return Math.sqrt(Math.pow(d.i.w() / 2, 2) + Math.pow(d.i.h() / 2, 2));
+                };
+//                the angle between (center.x-x0,center.y-y0) and (x,0)
+                d.i.base_angle = function () {
+                    return rad2deg(Math.atan(d.ExifImageHeight / d.ExifImageWidth));
+                };
+                d.i.center = function () {
+//                    center is always this value
+//                    translate_x and translate_y is always this value, no matter rotate or not
+                    return {
+                        x: d.i.translate_x + d.i.w() / 2,
+                        y: d.i.translate_y + d.i.h() / 2
+                    };
+                };
+//                  return the four vertexes, in original clockwise order
+//                  (0:top-left, 1:top-right,2:bottom-right,3"bottom-left)
+                d.i.vertexes = function () {
+                    var vertexes = [];
+                    var cent = d.i.center();
+                    vertexes.push({
+                        x: cent.x - d.i.radius() * Math.cos(deg2rad(d.i.rotate + d.i.base_angle())),
+                        y: cent.y - d.i.radius() * Math.sin(deg2rad(d.i.rotate + d.i.base_angle()))
+                    });
+                    vertexes.push({
+                        x: vertexes[0].x + d.i.w() * Math.cos(deg2rad(d.i.rotate)),
+                        y: vertexes[0].y + d.i.w() * Math.sin(deg2rad(d.i.rotate))
+                    });
+                    vertexes.push({
+                        x: vertexes[1].x - d.i.h() * Math.sin(deg2rad(d.i.rotate)),
+                        y: vertexes[1].y + d.i.h() * Math.cos(deg2rad(d.i.rotate))
+                    });
+                    vertexes.push({
+                        x: vertexes[0].x - d.i.h() * Math.sin(deg2rad(d.i.rotate)),
+                        y: vertexes[0].y + d.i.h() * Math.cos(deg2rad(d.i.rotate))
+                    });
+                    return vertexes;
+                };
+                d.i.top = function () {
+                    var k = (4 - Math.floor(d.i.rotate / 90) % 4) % 4;
+                    return d.i.vertexes()[k];
+                };
+                d.i.right = function () {
+                    var k = (5 - Math.floor(d.i.rotate / 90) % 4) % 4;
+                    return d.i.vertexes()[k];
+                };
+                d.i.bottom = function () {
+                    var k = (6 - Math.floor(d.i.rotate / 90) % 4) % 4;
+                    return d.i.vertexes()[k];
+                };
+                d.i.left = function () {
+                    var k = (7 - Math.floor(d.i.rotate / 90) % 4) % 4;
+                    return d.i.vertexes()[k];
+                };
+//return a 2 dimention array [[i1,i2],[j1,j2]] in which i1 i2 represent the index boundary of x-axis
+//                and j1 j2 represent the index boundary of y-axis
+                d.i.toPixel = function () {
+                    var i1 = Math.floor(d.i.left().x / pl);
+                    var i2 = Math.floor(d.i.right().x / pl);
+                    var i2c = Math.ceil(d.i.right().x / pl);
+                    var j1 = Math.floor(d.i.top().y / pl);
+                    var j2 = Math.floor(d.i.bottom().y / pl);
+                    var j2c = Math.ceil(d.i.bottom().y / pl);
+                    if (i2 == i2c) {
+                        i2 = i2 - 1;
+                    }
+                    if (j2 == j2c) {
+                        j2 = j2 - 1;
+                    }
+                    return [[Math.max(0, i1), Math.min(i2, v.width / pl - 1)], [Math.max(0, j1), Math.min(j2, v.height / pl - 1)]];
+                };
+            });
+            dataset.forEach(function (d, i) {
+                var x = Math.random() * v.width;
+                var y = Math.random() * v.height;
+                d.i.locate(x, y);
+            });
+
+            svga.selectAll(".photo").data(dataset, function (p) {
+                return p.FileName;
+            }).enter().append("image").attr("transform", function (p, i) {
+                return "translate(" + p.i.translate_x + ","
+                        + p.i.translate_y + ")"
+                        + ",rotate("
+                        + p.i.rotate
+                        + "," + p.i.w() / 2 + "," + p.i.h() / 2
+                        + "),scale(" + p.i.rate + ")"
+                        ;
+            }).attr("width", function (d) {
+                return d.ExifImageWidth;
+            }).attr("height", function (d) {
+                return d.ExifImageHeight;
+            }).attr("xlink:href", function (p) {
+                return base_dir + p.FileName;
+            }).on("click", enlar).attr("class", "photo");
+        }
+        function enlar(d) {
+            loopds(d.i.id);
+        }
+
+        function attract(d) {
+            dataset.forEach(function (d0) {
+                if (d0.i.selected) {
+                    var cent = d.i.center();
+                    d0.i.update_rate(d.i.rate);
+                    d0.i.locate(cent.x, cent.y);
+                    d0.i.update_rate(rate.default);
+                }
+            });
+            d.i.select();
+            d.i.update_rate(rate.selected);
+            d.i.locate(v.width / 2, v.height / 2);
+            related = get_related(d);
+            var attr;
+            attr = d.i.vertexes().map(function (k) {
+                var x = d.i.center().x;
+                var y = d.i.center().y;
+                return {
+                    x: k.x > x ? v.width - (v.width - k.x) / 2
+                            : k.x / 2,
+                    y: k.y > y ? v.height - (v.height - k.y) / 2
+                            : k.y / 2
+                };
+            });
+            var push;
+            push = d.i.vertexes().map(function (k) {
+                var x = d.i.center().x;
+                var y = d.i.center().y;
+                return {
+                    x: k.x > x ? v.width - (v.width - k.x) / 3
+                            : k.x / 3,
+                    y: k.y > y ? v.height - (v.height - k.y) / 3
+                            : k.y / 3
+                };
+            });
+
+            var px = push.map(function (p) {
+                return p.x;
+            });
+            var py = push.map(function (p) {
+                return p.y;
+            });
+            var sx = attr.map(function (p) {
+                return p.x;
+            });
+            var sy = attr.map(function (p) {
+                return p.y;
+            });
+            var minpx = px.reduce(function (a, b) {
+                return Math.min(a, b);
+            });
+            var maxpx = px.reduce(function (a, b) {
+                return Math.max(a, b);
+            });
+            var minpy = py.reduce(function (a, b) {
+                return Math.min(a, b);
+            });
+            var maxpy = py.reduce(function (a, b) {
+                return Math.max(a, b);
+            });
+            var minsx = sx.reduce(function (a, b) {
+                return Math.min(a, b);
+            });
+            var maxsx = sx.reduce(function (a, b) {
+                return Math.max(a, b);
+            });
+            var minsy = sy.reduce(function (a, b) {
+                return Math.min(a, b);
+            });
+            var maxsy = sy.reduce(function (a, b) {
+                return Math.max(a, b);
+            });
+            var push_rect = {
+                x: minpx, y: minpy, h: maxpy - minpy, w: maxpx - minpx
+            };
+//                        /*
+            selected = {
+                x: minsx, y: minsy, h: maxsy - minsy, w: maxsx - minsx
+            };
+            push_vertexes = push;
+//                        */
+
+//                        console.dir(selected);
+//                        console.dir(push_vertexes);
+            /*
+             svga.selectAll("rect").remove();
+             svga.append("rect")
+             .attr("x", selected.x)
+             .attr("y", selected.y)
+             .attr("height", selected.h)
+             .attr("width", selected.w).style("fill-opacity", .1);
+
+             svga.append("rect")
+             .attr("x", push_rect.x)
+             .attr("y", push_rect.y)
+             .attr("height", push_rect.h)
+             .attr("width", push_rect.w).style("fill-opacity", .1);
+             //                         */
+            dataset = dataset.map(function (d) {
+                if (!d.i.selected) {
+                    if ($.inArray(d.i.id, related) >= 0) {
+                        d.i.update_rate(rate.max);
+                    } else {
+                        d.i.update_rate(rate.default);
+                    }
+                }
+                return d;
+            });
+            judge0(0);
+        }
+        /**
+         * Helper function to determine whether there is an intersection between the two polygons described
+         * by the lists of vertices. Uses the Separating Axis Theorem
+         *
+         * @param a an array of connected points [{x:, y:}, {x:, y:},...] that form a closed polygon
+         * @param b an array of connected points [{x:, y:}, {x:, y:},...] that form a closed polygon
+         * @return true if there is any intersection between the 2 polygons, false otherwise
+         */
+        function doPolygonsIntersect(a, b) {
+            var polygons = [a, b];
+            var minA, maxA, projected, i, i1, j, minB, maxB;
+
+            for (i = 0; i < polygons.length; i++) {
+
+                // for each polygon, look at each edge of the polygon, and determine if it separates
+                // the two shapes
+                var polygon = polygons[i];
+                for (i1 = 0; i1 < polygon.length; i1++) {
+
+                    // grab 2 vertices to create an edge
+                    var i2 = (i1 + 1) % polygon.length;
+                    var p1 = polygon[i1];
+                    var p2 = polygon[i2];
+
+                    // find the line perpendicular to this edge
+                    var normal = {x: p2.y - p1.y, y: p1.x - p2.x};
+
+                    minA = maxA = undefined;
+                    // for each vertex in the first shape, project it onto the line perpendicular to the edge
+                    // and keep track of the min and max of these values
+                    for (j = 0; j < a.length; j++) {
+                        projected = normal.x * a[j].x + normal.y * a[j].y;
+                        if (isUndefined(minA) || projected < minA) {
+                            minA = projected;
+                        }
+                        if (isUndefined(maxA) || projected > maxA) {
+                            maxA = projected;
+                        }
+                    }
+
+                    // for each vertex in the second shape, project it onto the line perpendicular to the edge
+                    // and keep track of the min and max of these values
+                    minB = maxB = undefined;
+                    for (j = 0; j < b.length; j++) {
+                        projected = normal.x * b[j].x + normal.y * b[j].y;
+                        if (isUndefined(minB) || projected < minB) {
+                            minB = projected;
+                        }
+                        if (isUndefined(maxB) || projected > maxB) {
+                            maxB = projected;
+                        }
+                    }
+
+                    // if there is no overlap between the projects, the edge we are looking at separates the two
+                    // polygons, and we know there is no overlap
+                    if (maxA < minB || maxB < minA) {
+//                        console.log("polygons don't intersect!");
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function isUndefined(a) {
+            return a == undefined;
+        }
+
+        function rad2deg(r) {
+            return r * 180 / Math.PI
+        }
+
+        function deg2rad(d) {
+            return d * Math.PI / 180;
+        }
+
+        function enlarge(count) {
+            var dsindex = 0;
+            loopds(dsindex);
+        }
+
+        function loopds(i) {
+            if (i == dataset.length) {
+//                if (count < 4) {
+//                    enlarge(++count);
+//                }
+                console.dir("stops");
+                return;
+            }
+            var d = dataset[i];
+            if (d == null) {
+                console.log(i);
+            }
+//                        /*
+            var newindex = findBlank(d, pm);
+            var w = d.i.width();
+            var h = d.i.height();
+            var j1, j2, i1, i2;
+            var j1p, j2p, i1p, i2p;
+
+            var pixelindex = d.i.toPixel();
+            i1p = pixelindex[0][0];
+            i2p = pixelindex[0][1];
+            j1p = pixelindex[1][0];
+            j2p = pixelindex[1][1];
+
+            if (debug) {
+                console.log(d.i.id + ":" + d.i.left().x + "," + d.i.right().x + "," + d.i.top().y + "," + d.i.bottom().y);
+                console.log(d.i.id + ":" + i1p + "," + i2p + "," + j1p + "," + j2p + ":" + d.i.rate);
+            }
+            i1 = newindex[0][0];
+            i2 = newindex[0][1];
+            j1 = newindex[1][0];
+            j2 = newindex[1][1];
+            var x = pl * (i1 + (1 + i2 - i1) / 2);
+            var y = pl * (j1 + (1 + j2 - j1) / 2);
+            var xo = d.i.center().x;
+            var yo = d.i.center().y;
+            var ratei = w / h;
+            var rateupdate;
+            if ((1 + i2 - i1) / (1 + j2 - j1) < ratei) {
+                rateupdate = pl * d.i.rate * (1 + i2 - i1) / w;
+            } else {
+                rateupdate = pl * d.i.rate * (1 + j2 - j1) / h;
+            }
+            var ar = new Array(v.width / pl + 1).join('0').split('');
+            if (debug) {
+                console.log(d.i.id + ":" + i1 + "," + i2 + "," + j1 + "," + j2 + ":" + rateupdate);
+                console.log(ar.map(function (a, i) {
+                            return ("  " + i).slice(-3);
+                        }).join() + "|before");
+                pm.forEach(function (p, j) {
+                    console.log(p.map(function (p1) {
+                                return ("  " + p1.length).slice(-3);
+                            }).join() + "|" + j);
+                });
+                console.log(x + "," + y);
+            }
+            d.i.update_rate(rateupdate);
+            d.i.locate(x, y);
+            if (debug) {
+                console.log(d.i.id + ":" + d.i.left().x + "," + d.i.right().x + "," + d.i.top().y + "," + d.i.bottom().y);
+                console.log(ar.map(function (a, i) {
+                            return ("  " + i).slice(-3);
+                        }).join() + "|after");
+                pm.forEach(function (p, j) {
+                    console.log(p.map(function (p1) {
+                                return ("  " + p1.length).slice(-3);
+                            }).join() + "|" + j);
+                });
+            }
+            setTimeout(function () {
+                update_draw_dataset(dataset, interval_sub, function () {
+                    loopds(i + 1);
+                });
+            }, interval_sub);
+        }
+
+        //this function is called after the system init, to solve exceed and overlap
+        function judge0(count) {
+            if (((dataset.some(function (d) {
+                        return d.i.selected;
+                    }) || cvr > coverage.stable) && dataset.every(function (d0) {
+                        return !exceeds(d0, o) &&
+                                dataset.every(function (d1) {
+                                    return !overlap(d0, d1);
+                                });
+                    }))
+                    || count > 2 * step
+            ) {
+//                console.log("stable at step:" + count);
+                update_draw(count);
+            } else {
+                cycle(count);
+            }
+        }
+
+        function cycle(count) {
+            cal_coverage();
+            update_draw(count);
+            setTimeout(function () {
+                var aok = true;
+                dataset.filter(function (d) {
+                    return !d.i.selected;
+                }).sort(function (a, b) {
+                    var ea = exceeds(a, o), eb = exceeds(b, o);
+                    if (ea && !eb) {
+                        return -1;
+                    }
+                    if (eb && !ea) {
+                        return 1;
+                    }
+                    return 0;
+                }).forEach(function (d) {
+                    /*solve exceeds*/
+                    var solved = solve_exceeds($.inArray(d.i.id, related) >= 0 ?
+                            selected : o, d, {x: d.i.x(), y: d.i.y()});
+                    var exceedsbool = solved.exceeds;
+
+                    var overlapbool = false;
+                    /* solve overlap*/
+                    dataset.forEach(function (d1) {
+                        if (d.i.id == d1.i.id) {
+                            return;
+                        }
+                        if (overlap(d, d1)) {
+                            overlapbool = true;
+//we see this rectangle as a circle with radius (width+height)/2 to make this process easier
+                            var r = (d.i.w() + d.i.h()) / 2;
+                            var r1 = (d1.i.w() + d1.i.h()) / 2;
+
+                            r1 = d1.i.selected ? r1 * scale_rate.push : r1;
+
+//vx and vy denote the move direction vector
+                            var vx = d.i.x() - d1.i.x();
+                            var vy = d.i.y() - d1.i.y();
+//min distance between two circles to ensure no overlap
+                            var vd = Math.sqrt(vx * vx + vy * vy);
+                            var vdx = vd == 0 ? 0 : ( vx / vd) * (r + r1 - vd) / step;
+                            var vdy = vd == 0 ? 0 : ( vy / vd) * (r + r1 - vd) / step;
+//                                x += vdx;
+//                                y += vdy;
+                            if (vdx >= 0) {
+                                solved.xp += vdx;
+                            } else {
+                                solved.xn += vdx;
+                            }
+                            if (vdy >= 0) {
+                                solved.yp += vdy;
+                            } else {
+                                solved.yn += vdy;
+                            }
+                        }
+                    });
+                    aok = aok && (!overlapbool && !exceedsbool);
+                    if (!overlapbool && !exceedsbool) {
+                        /*
+                         var newindex = findBlank(d, pm);
+                         var w = d.i.width();
+                         var h = d.i.height();
+                         var j1, j2, i1, i2;
+                         var pixelindex = d.i.toPixel();
+                         i1 = newindex[0][0];
+                         i2 = newindex[0][1];
+                         j1 = newindex[1][0];
+                         j2 = newindex[1][1];
+                         var x = pl * (i1 + (i2 - i1) / 2);
+                         var y = pl * (j1 + (j2 - j1) / 2);
+                         var ratei = w / h;
+                         var rateupdate;
+                         if ((i2 - i1) / (j2 - j1) > ratei) {
+                         rateupdate = pl * d.i.rate * (i2 - i1) / w;
+                         } else {
+                         rateupdate = pl * d.i.rate * (j2 - j1) / h;
+                         }
+                         //                        console.log(d.i.id + ":" + i1 + "," + i2 + "," + j1 + "," + j2 + ":" + rateupdate);
+                         d.i.update_rate(Math.min(rateupdate, rate.max));
+                         //                        console.dir("before");
+                         //                        pm.forEach(function (p, j) {
+                         //                            console.log(j + ":" + p.map(function (p1) {
+                         //                                        return p1.length;
+                         //                                    }).join());
+                         //                        });
+                         d.i.locate(x, y);
+                         //                        console.dir("after");
+                         //                        pm.forEach(function (p, j) {
+                         //                            console.log(j + ":" + p.map(function (p1) {
+                         //                                        return p1.length;
+                         //                                    }).join());
+                         //                        });
+
+
+                         //                         */
+                    } else {
+                        if (solved.yn * solved.yp != 0 || solved.xn * solved.xp != 0) {
+                            //TODO
+                            if (d.i.rate > rate.min && cvr > coverage.min && !d.i.selected) {
+                                d.i.update_rate(d.i.rate - rate.step / 2);
+                            }
+                        } else {
+
+                        }
+                        if (d.i.pre_solved != null) {
+                            if (d.i.pre_solved.yn * solved.yp != 0 ||
+                                    d.i.pre_solved.xn * solved.xp != 0 ||
+                                    solved.yn * d.i.pre_solved.yp != 0 ||
+                                    solved.xn * d.i.pre_solved.xp != 0) {
+                                if (d.i.rate > rate.min && cvr > coverage.min && !d.i.selected) {
+                                    d.i.update_rate(d.i.rate - rate.step / 2);
+                                }
+                            }
+                        }
+                        d.i.pre_solved = solved;
+//                    }
+                        var x = d.i.x() + (solved.xn + solved.xp );
+                        var y = d.i.y() + (solved.yn + solved.yp );
+
+                        d.i.locate(x, y);
+                    }
+                });
+                if (aok) {
+                    var ar = new Array(v.width / pl + 1).join('0').split('')
+                    console.log(ar.map(function (a, i) {
+                                return ("  " + i).slice(-3);
+                            }).join() + "|aok");
+                    pm.forEach(function (p, j) {
+                        console.log(p.map(function (p1) {
+                                    return ("  " + p1.length).slice(-3);
+                                }).join() + "|" + j);
+                    });
+                    /*
+                     setTimeout(function () {
+                     update_draw_dataset(dataset, 1000, function () {
+                     enlarge(0);
+                     });
+                     }, 1000);
+                     */
+                } else {
+                    judge0(count + 1);
+                }
+            }, 0);
+        }
+
+        function update_draw(count) {
+            d3.select(".cvr").text(Math.round(cvr * 1000) / 1000);
+            d3.select(".cnt").text(count);
+            update_draw_dataset(dataset, interval);
+        }
+
+        function get_related(d) {
+            var index = d.i.id;
+            var res = sim_matrix[index].map(function (m, i) {
+                return {index: i, value: m};
+            }).sort(function (a, b) {
+                return b.value - a.value;
+            }).filter(function (m, i) {
+//                return the first 12 photos in photo set
+                return i < 12;
+            }).map(function (m) {
+                return m.index;
+            });
+            return res;
+        }
+
+        function update_draw_dataset(dataset, interval, callback) {
+//            pm.forEach(function (p, i) {
+//                console.log(i);
+//                console.dir(p)
+//            });
+            svga.selectAll(".photo").data(dataset, function (p) {
+                return p.FileName;
+            }).style("fill", function (p) {
+                return $.inArray(p.i.id, related) >= 0 ? "red" : "blue";
+            }).transition().duration(interval).ease("linear").attrTween("transform", function (p, index) {
+                var current = d3.select(this).attr("transform");
+                var to = "translate("
+                        + p.i.translate_x + ","
+                        + p.i.translate_y + "),rotate("
+                        + p.i.rotate
+                        + "," + p.i.w() / 2 + "," + p.i.h() / 2
+                        + "),scale(" + p.i.rate + ")";
+                return d3.interpolateString(current, to);
+            });
+
+            var pmlist = [];
+            pm.forEach(function (p, j) {
+                p.forEach(function (p1, i) {
+                    pmlist.push({j: j, i: i, value: p1});
+                });
+            });
+            /*
+             var divide = 1;
+             var matrix_rect_length = pl / divide;
+             var matrixsvg = d3.select(".matrix");
+             matrixsvg.attr("width", v.width / divide).attr("height", v.height / divide);
+             var matrixrects = matrixsvg.selectAll("rect").data(pmlist, function (p) {
+             return ("000" + p.j).slice(-4) + ("000" + p.i).slice(-4);
+             });
+             matrixrects.enter().append("rect").style("fill", "black").style("fill-opacity", function (p) {
+             return .1 * p.value.length;
+             }).attr("x", function (p) {
+             return p.i * matrix_rect_length;
+             }).attr("y", function (p) {
+             return p.j * matrix_rect_length;
+             }).attr("width", matrix_rect_length).attr("height", matrix_rect_length);
+             matrixrects.style("fill", "black").style("fill-opacity", function (p) {
+             return .1 * p.value.length;
+             }).attr("x", function (p) {
+             return p.i * matrix_rect_length;
+             }).attr("y", function (p) {
+             return p.j * matrix_rect_length;
+             }).attr("width", matrix_rect_length).attr("height", matrix_rect_length);
+             */
+            if (callback) {
+                callback();
+            }
+        }
+
+        //o is the container rectangle, d is the displaying pic
+        function solve_exceeds(o, d, obj) {
+            var xp = 0, xn = 0, yp = 0, yn = 0;
+            var exceeds = false;
+            var x = obj.x, y = obj.y;
+            if (0 < o.y - d.i.top().y) {
+                exceeds = true;
+                yp += o.y - d.i.top().y;
+            }
+            if (0 > o.h + o.y - d.i.bottom().y) {
+                exceeds = true;
+                yn += o.h + o.y - d.i.bottom().y;
+            }
+            if (0 < o.x - d.i.left().x) {
+                exceeds = true;
+                xp += o.x - d.i.left().x;
+            }
+            if (0 > o.w + o.x - d.i.right().x) {
+                exceeds = true;
+                xn += o.w + o.x - d.i.right().x;
+            }
+            return {xp: xp, xn: xn, yp: yp, yn: yn, exceeds: exceeds};
+        }
+
+        //d is one photo object, we find the blank around it
+        function findBlank(d, pm) {
+            var j1, j2, i1, i2;
+            if (d == null) {
+                console.dir(d);
+            }
+            var pixelindex = d.i.toPixel();
+            i1 = pixelindex[0][0];
+            i2 = pixelindex[0][1];
+            j1 = pixelindex[1][0];
+            j2 = pixelindex[1][1];
+            var jmax = v.height / pl - 1;
+            var imax = v.width / pl - 1;
+//four boolean variables indicate whether we can continue on this direction
+            var bj1 = j1 > 0, bj2 = j2 < jmax - 1, bi1 = i1 > 0, bi2 = i2 < imax - 1;
+
+            if (pm.filter(function (p, j) {
+                        return j >= j1 && j < j2;
+                    }).some(function (p) {
+                        if (p[i1] == null) {
+                            console.log(i1 + "null");
+                        }
+                        return p[i1].length > 1;
+                    })) {
+                i1 = Math.min(i1 + 1, i2);
+                bi1 = false;
+            }
+
+
+            if (pm.filter(function (p, j) {
+                        return j >= j1 && j < j2;
+                    }).some(function (p) {
+                        if (p[i2] == null) {
+                            console.log(i2 + "null");
+                        }
+                        return p[i2].length > 1;
+                    })) {
+                i2 = Math.max(i2 - 1, i2);
+                bi2 = false;
+            }
+
+
+            if (pm[j1] == null) {
+                console.log(j1 + "null");
+            }
+            if (pm[j1].filter(function (p, i) {
+                        return i >= i1 && i < i2;
+                    }).some(function (p) {
+                        return p.length > 1;
+                    })) {
+                j1 = Math.min(j1 + 1, j2);
+                bj1 = false;
+            }
+
+            if (pm[j2] == null) {
+                console.log(j2 + "null");
+            }
+            if (pm[j2].filter(function (p, i) {
+                        return i >= i1 && i < i2;
+                    }).every(function (p) {
+                        return p.length > 1;
+                    })) {
+                j2 = Math.max(j2 - 1, j1);
+                bj2 = false;
+            }
+
+
+//            pm.forEach(function (p, j) {
+//                console.log(p.map(function (p1) {
+//                            return ("  " + p1.length).slice(-3);
+//                        }).join() + "|" + j);
+//            });
+            while (bj1 || bj2 || bi1 || bi2) {
+                //                goes left  goes from pm[i1][j1-1] to pm[i2][j1-1]
+                if (bi1) {
+                    if (pm.filter(function (p, j) {
+                                return j >= j1 && j < j2;
+                            }).every(function (p) {
+                                if (p[i1 - 1] == null) {
+                                    console.dir(i1);
+                                }
+                                return p[i1 - 1].length == 0;
+                            })) {
+                        i1 = i1 - 1;
+                        if (i1 == 0) {
+                            bi1 = false;
+                        }
+                    } else {
+                        bi1 = false;
+                    }
+                }
+                //                goes right  goes from pm[i1][i2+1] to pm[i2][i2+1]
+                if (bi2) {
+                    if (pm.filter(function (p, j) {
+                                return j >= j1 && j < j2;
+                            }).every(function (p) {
+                                if (p[i2 + 1] == null) {
+                                    console.dir(i2);
+                                }
+                                return p[i2 + 1].length == 0;
+                            })) {
+                        i2 = i2 + 1;
+                        if (i2 == imax) {
+                            bi2 = false;
+                        }
+                    } else {
+                        bi2 = false;
+                    }
+                }
+                if (bj1) {
+                    if (pm[j1 - 1] == null) {
+                        console.dir(j1);
+                    }
+
+                    if (pm[j1 - 1].filter(function (p, i) {
+                                return i >= i1 && i < i2;
+                            }).every(function (p) {
+                                return p.length == 0;
+                            })) {
+                        j1 = j1 - 1;
+                        if (j1 == 0) {
+                            bj1 = false;
+                        }
+                    } else {
+                        bj1 = false;
+                    }
+                }
+                if (bj2) {
+                    if (pm[j2 + 1] == null) {
+                        console.dir(j2);
+                    }
+                    if (pm[j2 + 1].filter(function (p, i) {
+                                return i >= i1 && i < i2;
+                            }).every(function (p) {
+                                return p.length == 0;
+                            })) {
+                        j2 = j2 + 1;
+                        if (j2 == jmax) {
+                            bj2 = false;
+                        }
+                    } else {
+                        bj2 = false;
+                    }
+                }
+            }
+            return [[Math.max(0, i1), Math.min(i2, imax)], [Math.max(0, j1), Math.min(j2, jmax)]];
+        }
+    </script>
+</head>
+<body>
+<div class="wrapper"></div>
+<div class="info">
+    <h2 class="cvr"></h2>
+    <h2 class="cnt"></h2>
+    <!--<svg class="matrix"></svg>-->
+</div>
+</body>
+</html>
