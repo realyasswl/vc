@@ -12,6 +12,7 @@ Interactive photograph displaying system
 
 
 # Python scripts
+0. python scripts are used to initialize new photo sets, once set up, the application is fully functional without these python scripts.
 1. info.py `base_dir` is the folder which contains the photos, run this py file to read exif information from photos and generates smaller images files with reduced resolution, and a csv file which will be used in html application.
 2. main.py change `dir` to the folder which contains the photos, run this py file to calculate cos and histogram similarity matrix.
 3. image_similarity.py called by `main.py`
