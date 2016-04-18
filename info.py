@@ -190,6 +190,6 @@ def print_and_reduce(dir, aw):
         im.save(new_name, optimize=True, quality=95)
 
 
-base_dir = "/run/media/liwang/Other/photos/xiphoto/test/"
+base_dir = "/run/media/liwang/Other/photos/temp/"
 if __name__ == "__main__":
     print_and_reduce(base_dir, aw=540)
