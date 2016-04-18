@@ -4,10 +4,11 @@ Interactive photograph displaying system
 
 # How to use
 
-1. Run pixel.html to see "Automatic Arrangement" and "Photo Focusing" functions.
-* click photo after the animation stops, probably 10 ~ 12 seconds.
+* First of all, you need to have a running http server, `nginx` or `apache httpd`, and put all files in right place. If you run into any problem in this step, please contact us at any time. Due to local static file restriction this html application cannot run directly with only browsers.
+* Run `pixel.html` to see "Automatic Arrangement" function.
+* click photo after the animation stops to see "Photo Focusing", animation probably lasts for 10 ~ 12 seconds.
 * If the distance method is switched, the current layout will not automatically change.
-2. Run geo.html to see "Geo-location based placing" function.
+* Run `geo.html` to see "Geo-location based placing" function.
 
 
 # Python scripts
