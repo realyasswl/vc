@@ -1,6 +1,6 @@
 # Virual Computing
 
-Interactive photograph displaying system
+Dynamic display system
 
 # How to use
 

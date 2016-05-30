@@ -27,8 +27,8 @@
         .info {
             margin: 40px 4px 0 4px;
             float: right;
-            width: 112px;
-            height: 40px;
+            width: 210px;
+            /*height: 40px;*/
             color: #7fdbff;
         }
 
@@ -86,9 +86,7 @@
         var o = {x: 0, y: 0, h: v.height, w: v.width};
 
         var step = 30;
-        //        var base_dir = "mingphoto/Archive/";
-        //        var base_dir = "photodir/";
-        var base_dir = "xiphoto/test/";
+        var base_dir = "distance/";
         //        var base_dir = "temp/";
         var info_file = "info.csv";
 
@@ -98,14 +96,8 @@
         var sim_matrix;
         var dataset;
         var push_vertexes = [];
-        //        var push_vertexes = [
-        //            {x: 175, y: 42.922},
-        //            {x: 1525, y: 42.922},
-        //            {x: 1525, y: 937.078},
-        //            {x: 175, y: 937.078}];
         //        puhlic variable that store the related pictures list
         var related = [];
-        //        var selected = {h: 715.325, w: 1080, x: 310, y: 132.338};
         var selected = {};
         var interval = 1200;
         var interval_sub = 50;
@@ -126,22 +118,30 @@
         // divide it by the area of displaying plane
         var cvr = 0.0;
 
-        d3.text(base_dir + sim_info_hist, function (text) {
-            var data = d3.csv.parseRows(text).map(function (row) {
-                return row.map(function (value) {
-                    return +value;
-                });
+        $(document).ready(function () {
+            $('input[type=radio][name="dist"]').change(function () {
+                init_dist();
             });
-//            console.log(data);
-            sim_matrix = data.slice();
         });
+
+        function init_dist() {
+            console.log("switch to " + $('input[name="dist"]:checked').val());
+            d3.text(base_dir + $('input[name="dist"]:checked').val(), function (text) {
+                var data = d3.csv.parseRows(text).map(function (row) {
+                    return row.map(function (value) {
+                        return +value;
+                    });
+                });
+                sim_matrix = data.slice();
+            });
+        }
 
         d3.csv(base_dir + info_file, function (error, data) {
             if (error) throw error;
             dataset = data.slice();
             base();
             draw_gallery();
-        })
+        });
         function exceeds(d, o) {
             return d.i.top().y < o.y || d.i.right().x > o.x + o.w || d.i.bottom().y > o.y + o.h || d.i.left().x < o.x;
         }
@@ -809,8 +809,8 @@
         }
 
         function update_draw(count) {
-            d3.select(".cvr").text(Math.round(cvr * 1000) / 1000);
-            d3.select(".cnt").text(count);
+//            d3.select(".cvr").text(Math.round(cvr * 1000) / 1000);
+//            d3.select(".cnt").text(count);
             update_draw_dataset(dataset, interval);
         }
 
@@ -917,8 +917,10 @@
             var jmax = v.height / pl - 1;
             var imax = v.width / pl - 1;
 //four boolean variables indicate whether we can continue on this direction
+//top:j1;   bottom;j2;  left:i1;    right:i2
             var bj1 = j1 > 0, bj2 = j2 < jmax, bi1 = i1 > 0, bi2 = i2 < imax;
-
+//detect "fake" overlap before the loop starts
+//"fake" overlap means two photos share one or more squares but are not really overlapping
             if (pm.filter(function (p, j) {
                         return j >= j1 && j <= j2;
                     }).some(function (p) {
@@ -946,7 +948,6 @@
                 console.log("reduce bi2");
             }
 
-
             if (pm[j1] == null) {
                 console.log(j1 + "null");
             }
@@ -972,7 +973,6 @@
                 bj2 = false;
                 console.log("reduce bj2");
             }
-
 
 //            pm.forEach(function (p, j) {
 //                console.log(p.map(function (p1) {
@@ -1059,9 +1059,26 @@
 <body>
 <div class="wrapper"></div>
 <div class="info">
-    <h2 class="cvr"></h2>
-    <h2 class="cnt"></h2>
+    <!--<h2 class="cvr"></h2>-->
+    <!--<h2 class="cnt"></h2>-->
     <!--<svg class="matrix"></svg>-->
+
+    <h2 id="radio0">Distance Method</h2>
+    <p>
+        <label>
+            <input type='radio' name="dist" value="sim_info_cosine.csv" checked>
+            <span class="checkable">Pixel Cosine</span>
+        </label>
+    </p>
+    <p>
+        <label>
+            <input type='radio' name="dist" value="sim_info_hist.csv">
+            <span class="checkable">Histogram Euclidean</span>
+        </label>
+    </p>
 </div>
 </body>
+<script>
+    init_dist();
+</script>
 </html>

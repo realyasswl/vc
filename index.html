@@ -46,18 +46,30 @@
         var v = {height: 980, width: 1700};
 
         var coverage = {max: .82, min: .25, stable: .81};
-        var rate = {max: 1, min: .02, default: .3, step: .01, selected: .45};
+        var rate = {max: .9, min: .05, default: .3, step: .035, selected: 1};
 
         var o = {x: 0, y: 0, h: v.height, w: v.width};
+
+        var step = 100;
         //        var base_dir = "mingphoto/Archive/";
         //        var base_dir = "photodir/";
         var base_dir = "xiphoto/test/";
         var info_file = "info.csv";
+
+        var sim_info_hist = "sim_info_hist.csv";
+        var sim_info_cosine = "sim_info_cosine.csv";
+        var sim_info_ghc = "sim_info_ghc.csv";
+        var sim_matrix;
         var dataset;
+        var push_vertexes = [
+            {x: 175, y: 42.922},
+            {x: 1525, y: 42.922},
+            {x: 1525, y: 937.078},
+            {x: 175, y: 937.078}];
         //        puhlic variable that store the related pictures list
         var related = [];
-        var selected = o;
-        var interval = 2000;
+        var selected = {h: 715.325, w: 1080, x: 310, y: 132.338};
+        var interval = 1000;
         //        canvas
         var svga;
         var x = d3.scale.linear().range([0, v.width]).domain([0, v.width]);
@@ -74,6 +86,17 @@
         //record the coverage rate, more precisely, we sum all pictures' area and
         // divide it by the area of displaying plane
         var cvr = 0.0;
+
+        d3.text(base_dir + sim_info_hist, function (text) {
+            var data = d3.csv.parseRows(text).map(function (row) {
+                return row.map(function (value) {
+                    return +value;
+                });
+            });
+//            console.log(data);
+            sim_matrix = data.slice();
+        });
+
         d3.csv(base_dir + info_file, function (error, data) {
             if (error) throw error;
             dataset = data.slice();
@@ -85,17 +108,12 @@
         }
         function draw_gallery() {
             init();
-            console.dir(dataset);
+//            console.dir(dataset);
             judge0(0);
         }
         function overlap(d0, d1) {
             return doPolygonsIntersect(d0.i.vertexes(),
-                            d1.i.selected && ($.inArray(d0.FileName, related)) < 0 ? d1.i.vertexes().map(function (k) {
-                                return {
-                                    x: d1.i.center().x + scale_rate.push * (k.x - d1.i.center().x),
-                                    y: d1.i.center().y + scale_rate.push * (k.y - d1.i.center().y)
-                                }
-                            }) : d1.i.vertexes())
+                            d1.i.selected && ($.inArray(parseInt(d0.FileName.substr(3, 4)), related)) < 0 ? push_vertexes : d1.i.vertexes())
                     && (d0.FileName != d1.FileName);
         }
         function base() {
@@ -308,31 +326,47 @@
                             h: push[2].y - push[0].y,
                             w: push[2].x - push[0].x
                         }
-                        selected = {
-                            x: attr[0].x,
-                            y: attr[0].y,
-                            h: attr[2].y - attr[0].y,
-                            w: attr[2].x - attr[0].x
-                        };
                         /*
-                         svga.selectAll("rect").remove();
-                         svga.append("rect")
-                         .attr("x", selected.x)
-                         .attr("y", selected.y)
-                         .attr("height", selected.h)
-                         .attr("width", selected.w).style("fill-opacity", .1);
+                         selected = {
+                         x: attr[0].x,
+                         y: attr[0].y,
+                         h: attr[2].y - attr[0].y,
+                         w: attr[2].x - attr[0].x
+                         };
 
-                         svga.append("rect")
-                         .attr("x", push_rect.x)
-                         .attr("y", push_rect.y)
-                         .attr("height", push_rect.h)
-                         .attr("width", push_rect.w).style("fill-opacity", .1);
-                         */
+                         push_vertexes = d.i.vertexes().map(function (k) {
+                         return {
+                         x: d.i.center().x + scale_rate.push * (k.x - d.i.center().x),
+                         y: d.i.center().y + scale_rate.push * (k.y - d.i.center().y)
+                         }
+                         })
+                         //*/
 
+//                        console.dir(selected);
+//                        console.dir(push_vertexes);
+                        /*
+                        svga.selectAll("rect").remove();
+                        svga.append("rect")
+                                .attr("x", selected.x)
+                                .attr("y", selected.y)
+                                .attr("height", selected.h)
+                                .attr("width", selected.w).style("fill-opacity", .1);
+
+                        svga.append("rect")
+                                .attr("x", push_rect.x)
+                                .attr("y", push_rect.y)
+                                .attr("height", push_rect.h)
+                                .attr("width", push_rect.w).style("fill-opacity", .1);
+                        //                         */
+                        dataset = dataset.map(function (d) {
+                            if (!d.i.selected) {
+                                d.i.update_rate(rate.default);
+                            }
+                            return d;
+                        })
                         judge0(0);
                     })
                     .attr("class", "photo");
-
         }
         /**
          * Helper function to determine whether there is an intersection between the two polygons described
@@ -417,8 +451,8 @@
                                     return !overlap(d0, d1);
                                 });
                     }))
-                    || count > 100) {
-                console.log("stable at step:" + count);
+                    || count > 120) {
+//                console.log("stable at step:" + count);
                 update_draw(count);
             } else {
                 cycle(count);
@@ -427,7 +461,7 @@
 
         function cycle(count) {
             cal_coverage();
-//            update_draw(count);
+            update_draw(count);
             setTimeout(function () {
                 dataset.filter(function (d) {
                     return !d.i.selected;
@@ -442,8 +476,8 @@
                     return 0;
                 }).forEach(function (d) {
                     /*solve exceeds*/
-                    var solved = solve_exceeds($.inArray(d.FileName, related) >= 0 ?
-                            selected : o, d);
+                    var solved = solve_exceeds($.inArray(parseInt(d.FileName.substr(3, 4)), related) >= 0 ?
+                            selected : o, d, {x: d.i.x(), y: d.i.y()});
                     var x = solved.x;
                     var y = solved.y;
 
@@ -469,8 +503,8 @@
                                 var vy = d.i.y() - d1.i.y();
 //min distance between two circles to ensure no overlap
                                 var vd = Math.sqrt(vx * vx + vy * vy);
-                                x += vd == 0 ? 0 : ( vx / vd) * (r + r1 - vd) / (dataset.length);
-                                y += vd == 0 ? 0 : ( vy / vd) * (r + r1 - vd) / (dataset.length);
+                                x += vd == 0 ? 0 : ( vx / vd) * (r + r1 - vd) / step;
+                                y += vd == 0 ? 0 : ( vy / vd) * (r + r1 - vd) / step;
                             }
                         });
 
@@ -494,18 +528,25 @@
         }
 
         function get_related(d) {
-            return dataset.filter(function (d0) {
-                return Math.random() > 0.7;
-            }).map(function (d) {
-                return d.FileName;
+            var index = parseInt(d.FileName.substr(3, 4));
+            var result = sim_matrix[index].map(function (m, i) {
+                return {index: i, value: m};
+            }).sort(function (a, b) {
+                return b.value - a.value;
+            }).filter(function (m, i) {
+//                return the first 12 photos in photo set
+                return i < 12;
+            }).map(function (m) {
+                return m.index;
             });
+            return result;
         }
 
         function update_draw_dataset(dataset, interval) {
             svga.selectAll(".photo").data(dataset, function (p) {
                 return p.FileName;
             }).style("fill", function (p) {
-                return $.inArray(p.FileName, related) >= 0 ? "red" : "blue";
+                return $.inArray(parseInt(p.FileName.substr(3, 4)), related) >= 0 ? "red" : "blue";
             }).transition().duration(interval).ease("linear").attrTween("transform", function (p, index) {
                 var current = d3.select(this).attr("transform");
                 var to = "translate("
@@ -518,8 +559,8 @@
             });
         }
         //o is the container rectangle, d is the displaying pic
-        function solve_exceeds(o, d) {
-            var x = d.i.x(), y = d.i.y();
+        function solve_exceeds(o, d, obj) {
+            var x = obj.x, y = obj.y;
             if (0 < o.y - d.i.top().y) {
                 t = true;
                 y += o.y - d.i.top().y;
